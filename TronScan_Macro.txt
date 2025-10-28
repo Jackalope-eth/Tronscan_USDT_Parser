@@ -1,4 +1,4 @@
-Sub FilterUSDTAndCalculateRunningBalance_Tronscan()
+Sub Tronscan_USDT_Parser()
     Dim oDoc As Object, oSheet As Object
     Dim lastRow As Long, lastCol As Long
     Dim i As Long
@@ -165,3 +165,4 @@ Function CreateUnoSortField(fieldIndex As Integer, ascending As Boolean) As com.
     field.IsAscending = ascending
     CreateUnoSortField = field
 End Function
+
