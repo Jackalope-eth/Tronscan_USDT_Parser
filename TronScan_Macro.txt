@@ -1,0 +1,167 @@
+Sub FilterUSDTAndCalculateRunningBalance_Tronscan()
+    Dim oDoc As Object, oSheet As Object
+    Dim lastRow As Long, lastCol As Long
+    Dim i As Long
+    Dim tokenCol As Long, fromCol As Long, toCol As Long, amountCol As Long, dateCol As Long
+    Dim targetAddress As String
+    Dim balance As Double
+    Dim fromAddr As String, toAddr As String
+    Dim amtVal As Double
+    Dim cell As Object
+    Dim isInbound As Boolean
+
+    oDoc = ThisComponent
+    oSheet = oDoc.Sheets.getByIndex(0)
+
+    ' Ask for the target address
+    targetAddress = InputBox("Enter the target address (EOA) to analyze:", "Target Address")
+    If Trim(targetAddress) = "" Then
+        MsgBox "No target address provided. Exiting."
+        Exit Sub
+    End If
+    targetAddress = LCase(Trim(targetAddress))
+
+    ' Determine last row
+    lastRow = 1
+    Do While oSheet.getCellByPosition(0, lastRow).String <> ""
+        lastRow = lastRow + 1
+    Loop
+    lastRow = lastRow - 1
+
+    ' Determine last column
+    lastCol = 0
+    Do While Trim(oSheet.getCellByPosition(lastCol, 0).String) <> ""
+        lastCol = lastCol + 1
+    Loop
+
+    ' Find column indices
+    tokenCol = FindColumn(oSheet, "Token", lastCol)
+    fromCol = FindColumn(oSheet, "From", lastCol)
+    toCol = FindColumn(oSheet, "To", lastCol)
+    amountCol = FindColumn(oSheet, "Amount/TokenID", lastCol)
+    dateCol = FindColumn(oSheet, "Time(UTC)", lastCol)
+
+    If tokenCol = -1 Or fromCol = -1 Or toCol = -1 Or amountCol = -1 Or dateCol = -1 Then
+        MsgBox "One or more required columns not found."
+        Exit Sub
+    End If
+
+    ' Filter non-USDT (Tron)
+    For i = lastRow To 1 Step -1
+        If InStr(oSheet.getCellByPosition(tokenCol, i).String, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t") = 0 Then
+            oSheet.Rows.removeByIndex(i, 1)
+        End If
+    Next i
+
+    ' Recalculate last row
+    lastRow = 1
+    Do While oSheet.getCellByPosition(0, lastRow).String <> ""
+        lastRow = lastRow + 1
+    Loop
+    lastRow = lastRow - 1
+
+    ' Sort by Time(UTC) ascending
+    Dim oRange As Object
+    oRange = oSheet.getCellRangeByPosition(0, 0, lastCol, lastRow)
+
+    Dim sortDesc(1) As New com.sun.star.beans.PropertyValue
+    sortDesc(0).Name = "SortFields"
+    sortDesc(0).Value = Array( _
+        CreateUnoSortField(dateCol, True) _
+    )
+    sortDesc(1).Name = "ContainsHeader"
+    sortDesc(1).Value = True
+
+    oRange.Sort(sortDesc())
+
+    ' Add Running Balance header
+    If oSheet.getCellByPosition(lastCol, 0).String <> "Running Balance" Then
+        oSheet.getCellByPosition(lastCol, 0).String = "Running Balance"
+    End If
+
+    ' Format header row
+    Dim headerCell As Object
+    For i = 0 To lastCol
+        headerCell = oSheet.getCellByPosition(i, 0)
+        headerCell.HoriJustify = com.sun.star.table.CellHoriJustify.CENTER
+        headerCell.CharWeight = com.sun.star.awt.FontWeight.BOLD
+        Dim border As New com.sun.star.table.BorderLine
+        border.OuterLineWidth = 50
+        Dim tableBorder As New com.sun.star.table.TableBorder
+        tableBorder.TopLine = border
+        tableBorder.BottomLine = border
+        tableBorder.LeftLine = border
+        tableBorder.RightLine = border
+        tableBorder.IsTopLineValid = True
+        tableBorder.IsBottomLineValid = True
+        tableBorder.IsLeftLineValid = True
+        tableBorder.IsRightLineValid = True
+        headerCell.TableBorder = tableBorder
+    Next i
+
+    ' Format for numbers
+    Dim oFormats As Object, oFormatNum As Long
+    oFormats = oDoc.getNumberFormats()
+    Dim oLocale As New com.sun.star.lang.Locale
+    oLocale.Language = "en"
+    oLocale.Country = "US"
+    oFormatNum = oFormats.queryKey("#,##0.00", oLocale, True)
+    If oFormatNum = -1 Then
+        oFormatNum = oFormats.addNew("#,##0.00", oLocale)
+    End If
+
+    ' Calculate balances and style
+    balance = 0
+    For i = 1 To lastRow
+        fromAddr = LCase(Trim(oSheet.getCellByPosition(fromCol, i).String))
+        toAddr = LCase(Trim(oSheet.getCellByPosition(toCol, i).String))
+        amtVal = CDbl(Val(oSheet.getCellByPosition(amountCol, i).String))
+
+        isInbound = False
+        If fromAddr = targetAddress Then
+            balance = balance - amtVal
+        ElseIf toAddr = targetAddress Then
+            balance = balance + amtVal
+            isInbound = True
+        End If
+
+        ' Running balance value
+        cell = oSheet.getCellByPosition(lastCol, i)
+        cell.NumberFormat = oFormatNum
+        cell.Value = balance
+
+        ' Color and bold the row
+        Dim col As Long
+        For col = 0 To lastCol
+            cell = oSheet.getCellByPosition(col, i)
+            If isInbound Then
+                cell.CellBackColor = RGB(204, 255, 204) ' Green
+            Else
+                cell.CellBackColor = RGB(255, 204, 204) ' Red
+            End If
+            If LCase(cell.String) = targetAddress Then
+                cell.CharWeight = com.sun.star.awt.FontWeight.BOLD
+            End If
+        Next col
+    Next i
+
+    MsgBox "Done! Running USDT balance calculated for address: " & targetAddress
+End Sub
+
+Function FindColumn(oSheet As Object, colName As String, maxCols As Long) As Long
+    Dim i As Long
+    FindColumn = -1
+    For i = 0 To maxCols - 1
+        If Trim(oSheet.getCellByPosition(i, 0).String) = colName Then
+            FindColumn = i
+            Exit Function
+        End If
+    Next i
+End Function
+
+Function CreateUnoSortField(fieldIndex As Integer, ascending As Boolean) As com.sun.star.table.TableSortField
+    Dim field As New com.sun.star.table.TableSortField
+    field.Field = fieldIndex
+    field.IsAscending = ascending
+    CreateUnoSortField = field
+End Function
