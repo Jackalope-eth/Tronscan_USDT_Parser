@@ -1,4 +1,4 @@
-# Tronscan USDt Parser Macro
+# Tronscan USDT Parser Macro
 
 This macro helps cryptocurrency investigators using **Tronscan** to filter transactions involving **USDT (Tether)** on the TRON blockchain and calculate the running balance for a specific Ethereum address (EOA). It is designed for use with **LibreOffice Calc** and can be integrated easily into your spreadsheets.
 
